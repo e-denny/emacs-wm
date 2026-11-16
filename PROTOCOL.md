@@ -41,7 +41,7 @@ Non-goals
 ```
 river (compositor, owns input routing, rendering, frame deadlines)
   └─ wm-daemon          (the active `river_window_manager_v1` client)
-       └─ /run/user/1000/emacs-wm.wayland-0.sock
+       └─ $XDG_RUNTIME_DIR/emacs-wm.wayland-0.sock
   └─ emacs              (connects to the socket; owns layout + keymap policy)
        └─ frames/windows (one frame per desktop, app buffers inside)
   └─ noctalia (Quickshell)  ← zwlr_layer_shell_v1, never managed by the WM §6.4
