@@ -2,14 +2,17 @@
 # Does the frontend notice a *wedged* (SIGSTOPped) backend, restart it, and
 # resync?  This is the ping watchdog's test.
 set -u
+. "$(dirname "$0")/lib.sh"
+cd "$REPO"
+require_river
 bash "$(dirname "$0")/cleanup-ours.sh" >/dev/null 2>&1
 rm -f /tmp/wedge-app-input.txt /tmp/emacs-wm-elisp.log /tmp/emacs-wm-be.log
-rm -f /run/user/<uid>/emacs-wm.*.sock
+clear_sockets
 
-( WLR_WL_OUTPUTS=1 EMACS_WM_TEST_EL=~/src/emacs-wm/test/elisp-wedge.el \
+( WLR_WL_OUTPUTS=1 EMACS_WM_TEST_EL=elisp-wedge.el \
   EMACS_WM_BE_LOG_LEVEL=info \
-  timeout 60 ~/src/river/zig-out/bin/river -log-level debug -log-scopes wm \
-     -c ~/src/emacs-wm/test/run-emacs-only.sh \
+  timeout 60 "$RIVER" -log-level debug -log-scopes wm \
+     -c "$SESSION_SCRIPT" \
      >/tmp/wedge-river.log 2>&1 & )
 sleep 38
 

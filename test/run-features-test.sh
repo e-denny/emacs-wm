@@ -1,6 +1,14 @@
 #!/bin/bash
 # Drive test/elisp-features.el: simulation keys, submaps, dynamic desktops,
 # daemon restart/resync and the bar state file.
+#
+# Retired driver: needs legacy/wm-poc/ (not in this repository).  It also
+# calls `pkill -x river', which would kill a live session -- run it only
+# while you have no session you care about.
+HERE=$(cd "$(dirname "$0")" && pwd)
+REPO=$(cd "$HERE/.." && pwd)
+. "$HERE/lib.sh"
+
 set -u
 pkill -x river 2>/dev/null; sleep 1; pkill -9 -x river 2>/dev/null
 pkill -f 'wm-poc/target' 2>/dev/null
@@ -10,8 +18,8 @@ sleep 1
 rm -f /tmp/features-session.log /tmp/feat-app-input.txt /tmp/emacs-wm-elisp.log \
       "$XDG_RUNTIME_DIR/emacs-wm.state.json"
 
-(timeout 90 ~/src/river/zig-out/bin/river -log-level debug -log-scopes wm \
-    -c ~/src/emacs-wm/test/run-features.sh >/tmp/features-river.log 2>&1 &)
+(timeout 90 "$RIVER" -log-level debug -log-scopes wm \
+    -c $REPO/test/run-features.sh >/tmp/features-river.log 2>&1 &)
 sleep 52
 
 echo "=== elisp decisions ==="

@@ -3,14 +3,17 @@
 # frontend side of `output-removed'.  See test/elisp-hotplug.el for what
 # remains untestable here and why.
 set -u
+. "$(dirname "$0")/lib.sh"
+cd "$REPO"
+require_river
 bash "$(dirname "$0")/cleanup-ours.sh" >/dev/null 2>&1
 rm -f /tmp/hotplug-app-input.txt /tmp/emacs-wm-elisp.log /tmp/emacs-wm-be.log
-rm -f /run/user/<uid>/emacs-wm.*.sock
+clear_sockets
 
-( WLR_WL_OUTPUTS=2 EMACS_WM_TEST_EL=~/src/emacs-wm/test/elisp-hotplug.el \
+( WLR_WL_OUTPUTS=2 EMACS_WM_TEST_EL=elisp-hotplug.el \
   EMACS_WM_BE_LOG_LEVEL=debug \
-  timeout 50 ~/src/river/zig-out/bin/river -log-level debug -log-scopes wm \
-     -c ~/src/emacs-wm/test/run-emacs-only.sh \
+  timeout 50 "$RIVER" -log-level debug -log-scopes wm \
+     -c "$SESSION_SCRIPT" \
      >/tmp/hotplug-river.log 2>&1 & )
 sleep 28
 

@@ -14,17 +14,12 @@
 # configuration's own extra binding reached river, and the autostart list from
 # the temporary configuration suppressed the bar.
 set -u
-cd "$(dirname "$0")/.." || exit 1
-REPO=$PWD
-RIVER=${EMACS_WM_RIVER:-$REPO/../river/zig-out/bin/river}
-
-if [ ! -x "$RIVER" ]; then
-    echo "no river at $RIVER (set EMACS_WM_RIVER)"
-    exit 1
-fi
+. "$(dirname "$0")/lib.sh"
+cd "$REPO"
+require_river
 
 bash test/cleanup-ours.sh >/dev/null 2>&1
-rm -f /run/user/1000/emacs-wm.*.sock
+clear_sockets
 
 TMP=$(mktemp -d /tmp/emacs-wm-session-test.XXXXXX)
 mkdir -p "$TMP/config/emacs-wm" "$TMP/state"

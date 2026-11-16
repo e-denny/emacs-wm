@@ -9,10 +9,18 @@
 # river runs *under gdb* (ptrace_scope=1 forbids attaching to a non-child) with
 # breakpoints on debug.defaultPanic, so the panic is caught at its origin
 # instead of printing one line and hanging in the trace printer.
+#
+# Retired driver: needs legacy/wm-poc/ (not in this repository).  It also
+# calls `pkill -x river', which would kill a live session -- run it only
+# while you have no session you care about.
+HERE=$(cd "$(dirname "$0")" && pwd)
+REPO=$(cd "$HERE/.." && pwd)
+. "$HERE/lib.sh"
+
 set -u
 
 LEV=${1:-warning}
-CHILD=${2:-~/src/emacs-wm/test/run-elisp.sh}
+CHILD=${2:-$REPO/test/run-elisp.sh}
 SECS=${3:-50}
 
 GDBLOG=/tmp/diag-gdb-$LEV.log
@@ -47,7 +55,7 @@ EOF
 
 echo "=== river level=$LEV child=$CHILD (gdb as parent) ==="
 ( timeout $((SECS + 70)) gdb -batch -x /tmp/diag.gdb --args \
-    ~/src/river/zig-out/bin/river -log-level "$LEV" -log-scopes wm \
+    "$RIVER" -log-level "$LEV" -log-scopes wm \
     -c "$CHILD" >"$GDBLOG" 2>&1 ) &
 GDBPID=$!
 

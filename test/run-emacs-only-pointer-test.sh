@@ -2,18 +2,18 @@
 # A real pointer drag moves a window: virtual pointer -> river pointer binding
 # -> op start -> op_delta -> window moves -> op release -> rect reported back.
 set -u
-cd "$(dirname "$0")/.." || exit 1
-if [ ! -x test/tools/target/debug/pointerinject ]; then
-    ( cd test/tools && cargo build --offline ) || exit 1
-fi
+. "$(dirname "$0")/lib.sh"
+cd "$REPO"
+require_river
+need_tool pointerinject
 bash test/cleanup-ours.sh >/dev/null 2>&1
 rm -f /tmp/pointerinject.log /tmp/visual-dragged.ppm /tmp/emacs-wm-elisp.log /tmp/emacs-wm-be.log
-rm -f /run/user/<uid>/emacs-wm.*.sock
+clear_sockets
 
-( WLR_WL_OUTPUTS=1 EMACS_WM_TEST_EL=~/src/emacs-wm/test/elisp-pointer.el \
+( WLR_WL_OUTPUTS=1 EMACS_WM_TEST_EL=elisp-pointer.el \
   EMACS_WM_BE_LOG_LEVEL=debug \
-  timeout 60 ~/src/river/zig-out/bin/river -log-level debug -log-scopes wm \
-     -c ~/src/emacs-wm/test/run-emacs-only.sh \
+  timeout 60 "$RIVER" -log-level debug -log-scopes wm \
+     -c "$SESSION_SCRIPT" \
      >/tmp/pointer-river.log 2>&1 & )
 sleep 31
 

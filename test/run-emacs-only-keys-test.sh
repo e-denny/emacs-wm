@@ -8,18 +8,19 @@
 # binding matching and arrive as river_xkb_binding_v1.pressed, not as WM
 # injection which bypasses it.
 set -u
+. "$(dirname "$0")/lib.sh"
+cd "$REPO"
+require_river
 bash "$(dirname "$0")/cleanup-ours.sh" >/dev/null 2>&1
 # keyinject is the test-only input helper; build it if needed.
-if [ ! -x "$(dirname "$0")/tools/target/debug/keyinject" ]; then
-    ( cd "$(dirname "$0")/keyinject" && cargo build --offline ) || exit 1
-fi
+need_tool keyinject
 rm -f /tmp/keys-app-input.txt /tmp/emacs-wm-elisp.log /tmp/emacs-wm-be.log
-rm -f /run/user/<uid>/emacs-wm.*.sock
+clear_sockets
 
-( WLR_WL_OUTPUTS=1 EMACS_WM_TEST_EL=~/src/emacs-wm/test/elisp-keys.el \
+( WLR_WL_OUTPUTS=1 EMACS_WM_TEST_EL=elisp-keys.el \
   EMACS_WM_BE_LOG_LEVEL=debug \
-  timeout 60 ~/src/river/zig-out/bin/river -log-level debug -log-scopes wm \
-     -c ~/src/emacs-wm/test/run-emacs-only.sh \
+  timeout 60 "$RIVER" -log-level debug -log-scopes wm \
+     -c "$SESSION_SCRIPT" \
      >/tmp/keys-river.log 2>&1 & )
 sleep 34
 

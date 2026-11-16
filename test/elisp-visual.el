@@ -11,7 +11,13 @@
 (setq emacs-wm-border-width 2)
 (emacs-wm-enable)
 
-(defconst wv-shot "~/src/emacs-wm/test/tools/target/debug/screenshot")
+(defconst wv-shot
+  (expand-file-name
+   "screenshot"
+   (or (getenv "EMACS_WM_TEST_TOOLS")
+       (expand-file-name "tools/target/debug"
+                         (file-name-directory (or load-file-name
+                                                  buffer-file-name))))))
 
 (defun wv-screenshot (name)
   "Capture NAME, retrying while the nested host refuses to present a frame.

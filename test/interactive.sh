@@ -16,9 +16,17 @@
 # Ctrl+Alt+<key> (Ctrl+Alt+Shift+q to quit).
 #
 # Live log: the kitty window runs `tail -f` on it, so you can see the WM react.
+#
+# Retired driver: needs legacy/wm-poc/ (not in this repository).  It also
+# calls `pkill -x river', which would kill a live session -- run it only
+# while you have no session you care about.
+HERE=$(cd "$(dirname "$0")" && pwd)
+REPO=$(cd "$HERE/.." && pwd)
+. "$HERE/lib.sh"
+
 set -u
 
-WD=~/src/emacs-wm
+WD=$REPO
 LOG=/tmp/wm-interactive.log
 
 exec >"$LOG" 2>&1

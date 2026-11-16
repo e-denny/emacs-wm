@@ -1398,3 +1398,66 @@ binding, pass-through, Emacs event).
 | `run-session-test.sh` | 8/8 verdicts |
 | `run-emacs-only-simulate-test.sh` | 4/4 verdicts (translation and pass-through) |
 | leftovers after every run | `(none)` |
+
+# 2026-11-15 (sixth session): relocatable drivers, no paths into one home
+
+The drivers had the development machine baked in (`~/src/emacs-wm`,
+`~/src/river/zig-out/bin/river`, `/run/user/<uid>`).  A checkout now
+derives everything from its own location:
+
+```
+test/lib.sh        REPO, LISP, TOOLS, RUNTIME_DIR, RIVER (EMACS_WM_RIVER, then
+                   ../river/zig-out/bin/river, then $PATH), need_tool NAME
+```
+
+- Drivers `. "$(dirname "$0")/lib.sh"`, `cd "$REPO"`, `require_river`, and use
+  `"$RIVER"`, `"$SESSION_SCRIPT"`, `clear_sockets`, `state_file`.  Scenarios get
+  the helper directory from `EMACS_WM_TEST_TOOLS`, with a `load-file-name`
+  fallback so one can be loaded by hand.
+- `test/run-emacs-only.sh` resolves `EMACS_WM_TEST_EL` as a bare name against
+  `test/`, so drivers no longer pass absolute paths.
+- `test/cleanup-ours.sh` uses the same derivation: it kills only processes whose
+  arguments mention *this* checkout's `lisp/` or `test/` directory, matched by
+  literal substring on the executable's own name (`emacs*` or `river`).  Two
+  consequences: a session running from another checkout survives a test run, and
+  `pkill -x river` (which would kill a live session) is gone from the live
+  drivers.  The retired wm-poc-era drivers keep theirs and now say so in a
+  comment.
+- `contrib/emacs-wm.desktop` runs `Exec=emacs-wm-session` (looked up on `$PATH`,
+  like river's own session file), and `contrib/emacs-wm-session` resolves
+  symlinks so `~/.local/bin/emacs-wm-session` finds its checkout.
+
+Verified by exporting the tree to a directory that has nothing to do with the
+original and running a full nested suite there, with river found through a
+sibling symlink and `keyinject` built on demand:
+
+```
+copy at /tmp/reloc-test-parent/emacs-wm
+REPO=/tmp/reloc-test-parent/emacs-wm
+RIVER=/tmp/reloc-test-parent/emacs-wm/../river/zig-out/bin/river
+OK       the rule translated C-t in the mapped window
+OK       the mapped app received the translation (^A m)
+OK       the unbound window got the key passed through
+OK       the plain app received C-g itself (^G, 0x07)
+leftovers: (none)
+```
+
+## The lock test's timing assumption, removed
+
+A battery run hit the environment flake again: river logged `waiting for lock
+surfaces timed out`, and the lock client's 8 s hold expired before the
+compositor confirmed the lock, so it released with `destroy` (correct) and the
+suite failed with five MISMATCHes.  Nothing was wrong with the WM -- the nested
+host had simply been slow to present a frame.
+
+Both sides now avoid the race:
+
+- `lockclient` waits up to 6 s for `locked` *before* starting its hold, and says
+  `no locked event within 6s` if it never comes;
+- `test/elisp-lock.el` watches `emacs-wm--locked` with a 0.25 s timer and runs
+  the refusal checks when the lock actually engages, and the post-unlock
+  injection when it actually releases, instead of at absolute 11 s/19 s marks.
+
+Four consecutive runs of `run-emacs-only-lock-test.sh`: 8/8 verdicts each, and
+the extra verdict `lock client confirmed the lock` makes a client that never got
+`locked` a visible failure rather than a mysterious one.

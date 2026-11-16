@@ -1,6 +1,6 @@
 #!/bin/bash
 # Test harness for wm-poc. Run as:
-#   river -c ~/src/emacs-wm/test/run.sh
+#   river -c $REPO/test/run.sh
 #
 # Emacs roles:
 #   wm-frame:1  -> desktop 1 (container frame)
@@ -10,9 +10,17 @@
 # F9 inside Emacs dumps which frame is selected/focused, so the harness can
 # observe focus changes caused by the WM. All injected keys are logged with the
 # frame that received them.
+#
+# Retired driver: needs legacy/wm-poc/ (not in this repository).  It also
+# calls `pkill -x river', which would kill a live session -- run it only
+# while you have no session you care about.
+HERE=$(cd "$(dirname "$0")" && pwd)
+REPO=$(cd "$HERE/.." && pwd)
+. "$HERE/lib.sh"
+
 set -u
 
-WD=~/src/emacs-wm
+WD=$REPO
 FIFO=/tmp/wm-cmd.fifo
 KEYS=/tmp/wm-keys.log
 LOG=/tmp/emacs-wm-test.log

@@ -7,8 +7,13 @@
 #
 #   river -c test/run-emacs-only.sh
 #
+# Paths are derived from this file's location; the drivers pass the scenario to
+# load in EMACS_WM_TEST_EL (a bare name is resolved against this directory), so
+# a checkout works from anywhere.
 set -u
-LOG=/tmp/emacs-only-session.log
+HERE=$(cd "$(dirname "$0")" && pwd)
+REPO=$(cd "$HERE/.." && pwd)
+LOG=${EMACS_WM_SESSION_LOG:-/tmp/emacs-only-session.log}
 exec >"$LOG" 2>&1
 echo "=== emacs-only session start $(date -Is) WAYLAND_DISPLAY=$WAYLAND_DISPLAY"
 
@@ -19,8 +24,18 @@ rm -f /tmp/elisp-app-input.txt /tmp/emacs-wm-elisp.log /tmp/emacs-wm-be.log
 # at `-log-level warning' (see EMACS-ONLY.md, open issue 1).
 export EMACS_WM_BE_LOG_LEVEL="${EMACS_WM_BE_LOG_LEVEL:-debug}"
 
-TEST_EL=${EMACS_WM_TEST_EL:-~/src/emacs-wm/test/elisp-test.el}
-emacs -Q -L ~/src/emacs-wm/lisp -l "$TEST_EL" &
+# Scenario to load: an absolute path, or a name relative to test/.
+TEST_EL=${EMACS_WM_TEST_EL:-elisp-test.el}
+case $TEST_EL in
+    /*) ;;
+    *) TEST_EL=$HERE/$TEST_EL ;;
+esac
+
+# The scenarios spawn the native helpers (keyinject, screenshot, ...) from here.
+export EMACS_WM_TEST_TOOLS=${EMACS_WM_TEST_TOOLS:-$HERE/tools/target/debug}
+export EMACS_WM_REPO=${EMACS_WM_REPO:-$REPO}
+
+emacs -Q -L "$REPO/lisp" -l "$TEST_EL" &
 EMACSPID=$!
 
 # This script is river's child.  It must take Emacs with it: an orphaned

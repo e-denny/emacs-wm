@@ -207,8 +207,25 @@ fn main() -> Result<()> {
     }
     queue.roundtrip(&mut state)?;
 
+    // Wait for the compositor to confirm the lock *before* starting the hold.
+    // River only sends `locked' once a lock surface or a blank frame has been
+    // presented, and a nested session whose host is briefly busy can take
+    // longer than a couple of hundred milliseconds over that.  Counting the
+    // hold from the confirmation keeps the scenario's timing deterministic;
+    // giving up after WAIT_LOCKED is what keeps a stuck compositor from
+    // hanging the test.
+    const WAIT_LOCKED: u64 = 6;
+    let wait_deadline = std::time::Instant::now() + std::time::Duration::from_secs(WAIT_LOCKED);
+    while !state.locked && !state.finished && std::time::Instant::now() < wait_deadline {
+        queue.roundtrip(&mut state)?;
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    if !state.locked && !state.finished {
+        eprintln!("lockclient: no locked event within {WAIT_LOCKED}s");
+    }
+
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
-    while !state.finished && std::time::Instant::now() < deadline {
+    while state.locked && !state.finished && std::time::Instant::now() < deadline {
         queue.roundtrip(&mut state)?;
         std::thread::sleep(std::time::Duration::from_millis(50));
     }

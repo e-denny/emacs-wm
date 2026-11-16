@@ -7,12 +7,15 @@
 # currently wedges before the first manage sequence (reproducible with the
 # Rust daemon too, so it is not the Elisp backend's doing); see EMACS-ONLY.md.
 set -u
+. "$(dirname "$0")/lib.sh"
+cd "$REPO"
+require_river
 bash "$(dirname "$0")/cleanup-ours.sh" >/dev/null 2>&1
 rm -f /tmp/emacs-only-river.log
 
-( timeout 55 ~/src/river/zig-out/bin/river \
+( timeout 55 "$RIVER" \
     -log-level debug -log-scopes wm \
-    -c ~/src/emacs-wm/test/run-emacs-only.sh \
+    -c "$SESSION_SCRIPT" \
     >/tmp/emacs-only-river.log 2>&1 & )
 sleep 34
 
@@ -26,7 +29,7 @@ echo
 echo "=== app window received ==="
 cat /tmp/elisp-app-input.txt 2>/dev/null || echo "(nothing)"
 echo "=== bar state file ==="
-cat "${XDG_RUNTIME_DIR:-/run/user/<uid>}/emacs-wm.state.json" 2>/dev/null; echo
+cat "$(state_file)" 2>/dev/null; echo
 echo "=== river panics: $(grep -c panic /tmp/emacs-only-river.log 2>/dev/null) ==="
 echo "=== backend sequence balance ==="
 printf "manage_start=%s manage_finish=%s render_start=%s render_finish=%s\n" \

@@ -7,9 +7,17 @@
 #
 # Evidence: /tmp/stress-session.log (want/daemon), /tmp/stress-keys.log (what
 # actually reached Emacs), /tmp/stress-app-input.txt (what reached the app).
+#
+# Retired driver: needs legacy/wm-poc/ (not in this repository).  It also
+# calls `pkill -x river', which would kill a live session -- run it only
+# while you have no session you care about.
+HERE=$(cd "$(dirname "$0")" && pwd)
+REPO=$(cd "$HERE/.." && pwd)
+. "$HERE/lib.sh"
+
 set -u
 
-WD=~/src/emacs-wm
+WD=$REPO
 FIFO=/tmp/stress.fifo
 LOG=/tmp/stress-session.log
 KEYS=/tmp/stress-keys.log

@@ -5,18 +5,21 @@
 #   test/run-emacs-only-multi-test.sh
 #
 set -u
+. "$(dirname "$0")/lib.sh"
+cd "$REPO"
+require_river
 bash "$(dirname "$0")/cleanup-ours.sh" >/dev/null 2>&1
 pkill -f 'multi-app' 2>/dev/null
-rm -f /run/user/<uid>/emacs-wm.*.sock
+clear_sockets
 rm -f /tmp/emacs-only-multi-session.log /tmp/multi-app-input.txt \
       /tmp/emacs-wm-elisp.log /tmp/emacs-wm-be.log
 
 ( WLR_WL_OUTPUTS=2 \
-  EMACS_WM_TEST_EL=~/src/emacs-wm/test/elisp-multi.el \
+  EMACS_WM_TEST_EL=elisp-multi.el \
   EMACS_WM_BE_LOG_LEVEL=debug \
-  timeout 75 ~/src/river/zig-out/bin/river \
+  timeout 75 "$RIVER" \
      -log-level debug -log-scopes wm \
-     -c ~/src/emacs-wm/test/run-emacs-only.sh \
+     -c "$SESSION_SCRIPT" \
      >/tmp/emacs-only-multi-river.log 2>&1 & )
 sleep 52
 

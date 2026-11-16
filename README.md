@@ -113,9 +113,13 @@ The test tools (`test/tools`, Rust) exist because Elisp cannot pass file
 descriptors: real key presses, a real pointer, screencopy, and a session-lock
 client. The WM itself never needs an fd.
 
-The scripts currently assume this checkout at `~/src/emacs-wm` and a
-river build at `../river/zig-out/bin/river`; `EMACS_WM_RIVER` overrides the
-latter.
+Paths are derived from each script's own location (`test/lib.sh`), so a
+checkout works from any directory. The compositor is taken from
+`$EMACS_WM_RIVER`, else `../river/zig-out/bin/river` next to the checkout, else
+`river` in `$PATH`; `EMACS_WM_REPO` overrides the root and `XDG_RUNTIME_DIR` the
+socket directory. `cleanup-ours.sh` only ever kills processes that mention this
+checkout's paths, so a session running from another checkout survives a test
+run.
 
 ## Documentation
 

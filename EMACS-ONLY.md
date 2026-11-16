@@ -435,9 +435,11 @@ Three layers now make that impossible:
   `accept-process-output` returns immediately, which would pin a core for the
   life of a leftover backend. It now exits when the Wayland connection is gone.
 
-`test/check-leftovers.sh` is the thing to run after any session. It matches
-only paths that are ours (`~/src/emacs-wm/lisp`, `zig-out/bin/river`)
-and never a bare `emacs`, so the user's own Emacs is untouchable.
+`test/check-leftovers.sh` is the thing to run after any session. Both scripts
+are relocatable: they derive the checkout from their own location and match
+only processes whose arguments mention *that* `lisp/` or `test/` directory --
+never a bare `emacs`, never a bare `river` -- so the user's own Emacs and a
+live session running from another checkout are untouchable.
 
 ## Session lock (ext-session-lock-v1)
 

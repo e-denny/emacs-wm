@@ -2,8 +2,11 @@
 Type=Application
 Name=Emacs WM
 Comment=Emacs as the window manager, on the river compositor
-Exec=~/src/emacs-wm/contrib/emacs-wm-session
-TryExec=~/src/emacs-wm/contrib/emacs-wm-session
+# Exec is looked up on $PATH like `Exec=river' in river's own session file, so
+# put a symlink to this checkout's contrib/emacs-wm-session in ~/.local/bin (the
+# script resolves the symlink to find its repository).
+Exec=emacs-wm-session
+TryExec=emacs-wm-session
 # DesktopNames is the wayland-sessions convention (niri's session file uses it
 # too); desktop-file-validate reports it as a nonstandard key because it is not
 # part of the Desktop Entry spec. Greeters use it to set XDG_CURRENT_DESKTOP.

@@ -5,10 +5,18 @@
 #
 # For each run it reports: whether river printed a panic, whether injection
 # reached the app, and whether the WM serviced its manage sequences.
+#
+# Retired driver: needs legacy/wm-poc/ (not in this repository).  It also
+# calls `pkill -x river', which would kill a live session -- run it only
+# while you have no session you care about.
+HERE=$(cd "$(dirname "$0")" && pwd)
+REPO=$(cd "$HERE/.." && pwd)
+. "$HERE/lib.sh"
+
 set -u
 
 LEV=${1:-warning}
-CHILD=${2:-~/src/emacs-wm/test/run.sh}
+CHILD=${2:-$REPO/test/run.sh}
 RUNS=${3:-3}
 SECS=${4:-30}
 
@@ -26,7 +34,7 @@ for n in $(seq 1 "$RUNS"); do
   rm -f "$RIVERLOG" "$EVIDENCE" /tmp/elisp-app-input.txt /tmp/emacs-wm-test.log \
         /tmp/elisp-session.log /tmp/emacs-wm-elisp.log
 
-  ( timeout $((SECS + 40)) ~/src/river/zig-out/bin/river \
+  ( timeout $((SECS + 40)) "$RIVER" \
       -log-level "$LEV" -log-scopes wm -c "$CHILD" >"$RIVERLOG" 2>&1 ) &
   sleep "$SECS"
 

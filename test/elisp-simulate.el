@@ -7,7 +7,12 @@
 
 (require 'emacs-wm)
 
-(defconst wl-dir "~/src/emacs-wm/test/tools/target/debug")
+(defconst wl-dir
+  (or (getenv "EMACS_WM_TEST_TOOLS")
+      (expand-file-name "tools/target/debug"
+                        (file-name-directory (or load-file-name
+                                                 buffer-file-name))))
+  "Directory of the native helpers (test/tools/target/debug), for spawning them.")
 
 (emacs-wm--log "--- simulate test starting, socket %s" (emacs-wm-socket-path))
 

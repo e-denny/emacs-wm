@@ -6,15 +6,18 @@
 #   test/run-emacs-only-features-test.sh
 #
 set -u
+. "$(dirname "$0")/lib.sh"
+cd "$REPO"
+require_river
 bash "$(dirname "$0")/cleanup-ours.sh" >/dev/null 2>&1
 pkill -f 'feat-app' 2>/dev/null
-rm -f /run/user/<uid>/emacs-wm.*.sock
+clear_sockets
 rm -f /tmp/emacs-only-features-session.log /tmp/feat-app-input.txt \
       /tmp/emacs-wm-elisp.log /tmp/emacs-wm-be.log \
-      "${XDG_RUNTIME_DIR:-/tmp}/emacs-wm.state.json"
+      "$(state_file)"
 
-( timeout 85 ~/src/river/zig-out/bin/river -log-level debug -log-scopes wm \
-    -c ~/src/emacs-wm/test/run-emacs-only-features.sh \
+( timeout 85 "$RIVER" -log-level debug -log-scopes wm \
+    -c "$REPO/test/run-emacs-only-features.sh" \
     >/tmp/emacs-only-features-river.log 2>&1 & )
 sleep 50
 
@@ -32,7 +35,7 @@ echo
 echo "=== app received (od -c: ^A proves Ctrl was held) ==="
 od -c /tmp/feat-app-input.txt 2>/dev/null | head -3 || echo "(nothing)"
 echo "=== state file for the bar ==="
-cat "${XDG_RUNTIME_DIR:-/tmp}/emacs-wm.state.json" 2>/dev/null | head -c 400; echo
+cat "$(state_file)" 2>/dev/null | head -c 400; echo
 echo "=== river panics: $(grep -c panic /tmp/emacs-only-features-river.log 2>/dev/null) ==="
 echo "=== sequence balance ==="
 printf "manage_start=%s manage_finish=%s render_start=%s render_finish=%s\n" \

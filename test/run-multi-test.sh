@@ -1,6 +1,14 @@
 #!/bin/bash
 # Drive the multi-output test: a nested river with TWO outputs, the daemon, and
 # Emacs as the WM's brain. Prints the per-output desktop evidence.
+#
+# Retired driver: needs legacy/wm-poc/ (not in this repository).  It also
+# calls `pkill -x river', which would kill a live session -- run it only
+# while you have no session you care about.
+HERE=$(cd "$(dirname "$0")" && pwd)
+REPO=$(cd "$HERE/.." && pwd)
+. "$HERE/lib.sh"
+
 set -u
 pkill -x river 2>/dev/null; sleep 1; pkill -9 -x river 2>/dev/null
 pkill -f 'wm-poc/target' 2>/dev/null
@@ -10,10 +18,10 @@ sleep 1
 rm -f /tmp/elisp-session.log /tmp/multi-app-input.txt /tmp/emacs-wm-elisp.log
 
 (WLR_WL_OUTPUTS=2 \
- EMACS_WM_TEST_EL=~/src/emacs-wm/test/elisp-multi.el \
- timeout 70 ~/src/river/zig-out/bin/river \
+ EMACS_WM_TEST_EL=$REPO/test/elisp-multi.el \
+ timeout 70 "$RIVER" \
     -log-level debug -log-scopes wm \
-    -c ~/src/emacs-wm/test/run-elisp.sh >/tmp/multi-river.log 2>&1 &)
+    -c $REPO/test/run-elisp.sh >/tmp/multi-river.log 2>&1 &)
 sleep 40
 
 echo "=== outputs the daemon saw ==="

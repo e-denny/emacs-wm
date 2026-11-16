@@ -10,7 +10,13 @@
 
 (require 'emacs-wm)
 
-(defconst wo-keyinject "~/src/emacs-wm/test/tools/target/debug/keyinject")
+(defconst wo-keyinject
+  (expand-file-name
+   "keyinject"
+   (or (getenv "EMACS_WM_TEST_TOOLS")
+       (expand-file-name "tools/target/debug"
+                         (file-name-directory (or load-file-name
+                                                  buffer-file-name))))))
 
 (emacs-wm--log "--- op test starting, socket %s" (emacs-wm-socket-path))
 (setq emacs-wm-window-rules '(((:app-id "kitty") (:float t))))

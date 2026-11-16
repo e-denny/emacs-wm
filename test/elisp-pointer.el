@@ -7,7 +7,12 @@
 
 (require 'emacs-wm)
 
-(defconst wp-dir "~/src/emacs-wm/test/tools/target/debug")
+(defconst wp-dir
+  (or (getenv "EMACS_WM_TEST_TOOLS")
+      (expand-file-name "tools/target/debug"
+                        (file-name-directory (or load-file-name
+                                                 buffer-file-name))))
+  "Directory of the native helpers (test/tools/target/debug), for spawning them.")
 
 (emacs-wm--log "--- pointer test starting, socket %s" (emacs-wm-socket-path))
 (setq emacs-wm-window-rules nil)        ; start tiled

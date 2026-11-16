@@ -2,25 +2,25 @@
 # Session lock: while an ext-session-lock lock is held the WM must not change
 # focus, inject keys or run ordinary bindings; afterwards it must recover.
 set -u
-cd "$(dirname "$0")/.." || exit 1
-if [ ! -x test/tools/target/debug/lockclient ]; then
-    ( cd test/tools && cargo build --offline ) || exit 1
-fi
+. "$(dirname "$0")/lib.sh"
+cd "$REPO"
+require_river
+need_tool lockclient
 bash test/cleanup-ours.sh >/dev/null 2>&1
 rm -f /tmp/lock-app-input.txt /tmp/visual-locked.ppm /tmp/visual-unlocked.ppm \
       /tmp/lockclient.log /tmp/screenshot.log \
       /tmp/emacs-wm-elisp.log /tmp/emacs-wm-be.log
-rm -f /run/user/<uid>/emacs-wm.*.sock
+clear_sockets
 
-( WLR_WL_OUTPUTS=1 EMACS_WM_TEST_EL=~/src/emacs-wm/test/elisp-lock.el \
+( WLR_WL_OUTPUTS=1 EMACS_WM_TEST_EL=elisp-lock.el \
   EMACS_WM_BE_LOG_LEVEL=debug \
-  timeout 60 ~/src/river/zig-out/bin/river -log-level debug -log-scopes wm,lock,output \
-     -c ~/src/emacs-wm/test/run-emacs-only.sh \
+  timeout 70 "$RIVER" -log-level debug -log-scopes wm,lock,output \
+     -c "$SESSION_SCRIPT" \
      >/tmp/lock-river.log 2>&1 & )
-sleep 28
+sleep 30
 
 echo "=== frontend ==="
-grep -E "lock test|taking the session|locked|unlocked|ignored|refused|screenshot|8s \(|11s \(|13s \(|19s \(|22s \(" \
+grep -E "lock test|taking the session|locked|unlocked|ignored|refused|screenshot|before the lock|final" \
      /tmp/emacs-wm-elisp.log 2>/dev/null | head -22
 echo
 echo "=== backend: lock events, focus re-asserted, injected keys ==="
@@ -88,12 +88,14 @@ verdict "river logged session locked" \
     'grep -q "info(lock): session locked" /tmp/lock-river.log'
 verdict "WM saw locked, refused injection and bindings" \
     'grep -q "session locked" /tmp/emacs-wm-elisp.log && grep -q "inject (\"x\" \"Return\") refused: session locked" /tmp/emacs-wm-elisp.log && grep -q "key \"s-2\" ignored: session locked" /tmp/emacs-wm-elisp.log'
+verdict "lock client confirmed the lock" \
+    'grep -qx "lockclient: locked" /tmp/lockclient.log'
 verdict "lock client never hit a protocol error" \
     '! grep -q "Protocol error\|invalid_unlock\|never sent" /tmp/lockclient.log'
 verdict "river logged session unlocked" \
     'grep -q "info(lock): session unlocked" /tmp/lock-river.log'
 verdict "WM cleared its locked flag" \
-    'grep -q "19s (after unlock): locked=nil" /tmp/emacs-wm-elisp.log'
+    'grep -q "unlocked (lock released): locked=nil" /tmp/emacs-wm-elisp.log'
 verdict "WM re-asserted keyboard focus after unlock" \
     'awk "/session unlocked/{seen=1} seen && /focus -> window/{found=1} END{exit !found}" /tmp/emacs-wm-be.log'
 verdict "post-unlock injection reached the app" \
