@@ -1,0 +1,35 @@
+[package]
+name = "emacs-wm-test-tools"
+version = "0.1.0"
+edition = "2021"
+
+# Test-only helpers for emacs-wm.  None of this is part of the window manager:
+# the WM itself stays pure Elisp.  These exist because Elisp cannot pass file
+# descriptors, and a virtual keyboard/pointer, a screencopy capture and a
+# session lock all need one.
+#
+#   keyinject      type keys as a real input device (river's binding path)
+#   pointerinject  move the pointer / drag with a modifier held
+#   screenshot     capture the session to a PPM (convert with ffmpeg)
+#   lockclient     take an ext-session-lock lock and paint it solid
+
+[[bin]]
+name = "keyinject"
+path = "src/bin/keyinject.rs"
+[[bin]]
+name = "pointerinject"
+path = "src/bin/pointerinject.rs"
+[[bin]]
+name = "screenshot"
+path = "src/bin/screenshot.rs"
+[[bin]]
+name = "lockclient"
+path = "src/bin/lockclient.rs"
+
+[dependencies]
+anyhow = "1"
+wayland-backend = "0.3"
+wayland-client = "0.31"
+wayland-scanner = "0.31"
+xkbcommon = "0.9"
+bitflags = "2"

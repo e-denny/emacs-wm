@@ -1,0 +1,39 @@
+diff --git a/river/main.zig b/river/main.zig
+index 5ee24b0..47a1d12 100644
+--- a/river/main.zig
++++ b/river/main.zig
+@@ -55,6 +55,12 @@ pub fn main(init: std.process.Init.Minimal) anyerror!void {
+ 
+     const args = try init.args.toSlice(arena);
+ 
++    // Captured before wlroots/EGL/etc. run: the libc `environ` array backing
++    // `init.environ` can be reallocated by a setenv()/putenv() call in a
++    // dependency, which leaves the cached view inside `init.environ` dangling.
++    var startup_env_map = try init.environ.createMap(util.gpa);
++    defer startup_env_map.deinit();
++
+     const result = flags.parser(&.{
+         .{ .name = "h", .kind = .boolean },
+         .{ .name = "version", .kind = .boolean },
+@@ -166,18 +172,15 @@ pub fn main(init: std.process.Init.Minimal) anyerror!void {
+     const child_pgid = if (startup_command) |cmd| blk: {
+         log.info("running init executable '{s}'", .{cmd});
+ 
+-        var env_map = try init.environ.createMap(util.gpa);
+-        defer env_map.deinit();
+-
+-        try env_map.put("WAYLAND_DISPLAY", socket);
++        try startup_env_map.put("WAYLAND_DISPLAY", socket);
+ 
+         if (build_options.xwayland) {
+             if (server.xwayland) |xwayland| {
+-                try env_map.put("DISPLAY", mem.sliceTo(xwayland.display_name, 0));
++                try startup_env_map.put("DISPLAY", mem.sliceTo(xwayland.display_name, 0));
+             }
+         }
+ 
+-        const env_block = try env_map.createPosixBlock(util.gpa, .{});
++        const env_block = try startup_env_map.createPosixBlock(util.gpa, .{});
+         defer env_block.deinit(util.gpa);
+ 
+         const child_args = [_:null]?[*:0]const u8{ "/bin/sh", "-c", cmd, null };

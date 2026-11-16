@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Emacs WM
+Comment=Emacs as the window manager, on the river compositor
+Exec=~/src/emacs-wm/contrib/emacs-wm-session
+TryExec=~/src/emacs-wm/contrib/emacs-wm-session
+# DesktopNames is the wayland-sessions convention (niri's session file uses it
+# too); desktop-file-validate reports it as a nonstandard key because it is not
+# part of the Desktop Entry spec. Greeters use it to set XDG_CURRENT_DESKTOP.
+DesktopNames=emacs-wm

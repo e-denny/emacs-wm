@@ -1,0 +1,143 @@
+diff --git a/river/KeyboardGroup.zig b/river/KeyboardGroup.zig
+index 87db69f..a45466d 100644
+--- a/river/KeyboardGroup.zig
++++ b/river/KeyboardGroup.zig
+@@ -149,6 +149,11 @@ pub fn unref(group: *KeyboardGroup, to_release: []u32) void {
+     if (group.seat.wlr_seat.getKeyboard() == &group.state) {
+         if (group.seat.keyboard_groups.first()) |other| {
+             group.seat.wlr_seat.setKeyboard(&other.state);
++        } else {
++            // Same as SyncedVirtKb: never leave the seat pointing at a freed
++            // wlr.Keyboard, or the next keyboardNotifyEnter() casts freed
++            // memory to a *KeyboardGroup.
++            group.seat.wlr_seat.setKeyboard(null);
+         }
+     }
+ 
+@@ -285,7 +290,10 @@ fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboa
+     const consumer: KeyConsumer = blk: {
+         if (event.state == .released) {
+             // Decision is made on press; release only follows it
+-            const kv = group.pressed.fetchSwapRemove(event.keycode).?;
++            const kv = group.pressed.fetchSwapRemove(event.keycode) orelse {
++                log.err("BUGPROBE: release for keycode {d} with no recorded press", .{event.keycode});
++                @panic("BUGPROBE release without press");
++            };
+             assert(kv.value.count == 0);
+             break :blk kv.value.consumer;
+         }
+diff --git a/river/Seat.zig b/river/Seat.zig
+index 171a2d2..7630f29 100644
+--- a/river/Seat.zig
++++ b/river/Seat.zig
+@@ -1252,19 +1252,29 @@ pub fn keyboardEnterOrLeave(seat: *Seat, target_surface: ?*wlr.Surface) void {
+ 
+ fn keyboardNotifyEnter(seat: *Seat, wlr_surface: *wlr.Surface) void {
+     if (seat.wlr_seat.getKeyboard()) |wlr_keyboard| {
+-        const group: *KeyboardGroup = @ptrCast(@alignCast(wlr_keyboard.data));
++        // A synced virtual keyboard can be the seat's active keyboard without
++        // having any KeyboardGroup associated with it (its state is not part of
++        // a group). Handle that case instead of casting null below.
++        const group: ?*KeyboardGroup = if (wlr_keyboard.data) |ptr|
++            @ptrCast(@alignCast(ptr))
++        else
++            null;
++
++        if (group) |g| {
++            var buffer: [KeyboardGroup.pressed_count_max]u32 = undefined;
++            var keycodes: std.ArrayList(u32) = .initBuffer(&buffer);
++            for (g.pressed.keys(), g.pressed.values()) |keycode, press| {
++                if (press.consumer == .focus) keycodes.appendAssumeCapacity(keycode);
++            }
+ 
+-        var buffer: [KeyboardGroup.pressed_count_max]u32 = undefined;
+-        var keycodes: std.ArrayList(u32) = .initBuffer(&buffer);
+-        for (group.pressed.keys(), group.pressed.values()) |keycode, press| {
+-            if (press.consumer == .focus) keycodes.appendAssumeCapacity(keycode);
++            seat.wlr_seat.keyboardNotifyEnter(
++                wlr_surface,
++                keycodes.items,
++                &g.state.modifiers,
++            );
++        } else {
++            seat.wlr_seat.keyboardNotifyEnter(wlr_surface, &.{}, &wlr_keyboard.modifiers);
+         }
+-
+-        seat.wlr_seat.keyboardNotifyEnter(
+-            wlr_surface,
+-            keycodes.items,
+-            &group.state.modifiers,
+-        );
+     } else {
+         seat.wlr_seat.keyboardNotifyEnter(wlr_surface, &.{}, null);
+     }
+diff --git a/river/SyncedVirtKb.zig b/river/SyncedVirtKb.zig
+index d09cb40..4f65408 100644
+--- a/river/SyncedVirtKb.zig
++++ b/river/SyncedVirtKb.zig
+@@ -54,6 +54,11 @@ pub fn create(seat: *Seat, wlr_virt_kb: *wlr.VirtualKeyboardV1) !void {
+         .name = "river.SyncedVirtKb",
+         .led_update = null,
+     }, "river.SyncedVirtKb");
++    // `wlr_keyboard.data` is left untouched by init() (the struct above is
++    // `undefined`), but Seat.keyboardNotifyEnter() interprets that field as a
++    // `*KeyboardGroup`. This keyboard is not part of any group, so make that
++    // explicit instead of leaving allocator garbage there.
++    synced_virt_kb.state.data = null;
+     if (wlr_virt_kb.keyboard.keymap) |keymap| {
+         _ = synced_virt_kb.state.setKeymap(keymap);
+     }
+@@ -80,6 +85,11 @@ pub fn destroy(synced_virt_kb: *SyncedVirtKb) void {
+     if (synced_virt_kb.seat.wlr_seat.getKeyboard() == &synced_virt_kb.state) {
+         if (synced_virt_kb.seat.keyboard_groups.first()) |other| {
+             synced_virt_kb.seat.wlr_seat.setKeyboard(&other.state);
++        } else {
++            // No grouped keyboard is left to hand the seat to. Leaving the seat
++            // pointing at this freed state makes the next keyboardNotifyEnter()
++            // read freed memory and treat it as a *KeyboardGroup.
++            synced_virt_kb.seat.wlr_seat.setKeyboard(null);
+         }
+     }
+ 
+@@ -125,7 +135,10 @@ fn queueModifiers(listener: *wl.Listener(*wlr.Keyboard), _: *wlr.Keyboard) void
+     const synced_virt_kb: *SyncedVirtKb = @fieldParentPtr("queue_modifiers", listener);
+     synced_virt_kb.seat.synced_virt_kb_queue.pushBackBounded(.{
+         .synced_virt_kb = synced_virt_kb,
+-        .data = .{ .modifiers = synced_virt_kb.wlr_virt_kb.?.keyboard.modifiers },
++        .data = .{ .modifiers = if (synced_virt_kb.wlr_virt_kb) |vkb| vkb.keyboard.modifiers else {
++            log.err("BUGPROBE: queueModifiers with no vkb", .{});
++            return;
++        } },
+     }) catch {
+         log.err("synced virtual keyboard event queue full, dropping event", .{});
+         return;
+@@ -135,7 +148,11 @@ fn queueModifiers(listener: *wl.Listener(*wlr.Keyboard), _: *wlr.Keyboard) void
+ 
+ fn queueKeymap(listener: *wl.Listener(*wlr.Keyboard), _: *wlr.Keyboard) void {
+     const synced_virt_kb: *SyncedVirtKb = @fieldParentPtr("queue_keymap", listener);
+-    const keymap = synced_virt_kb.wlr_virt_kb.?.keyboard.keymap orelse return;
++    const vkb = synced_virt_kb.wlr_virt_kb orelse {
++        log.err("BUGPROBE: queueKeymap with no vkb", .{});
++        return;
++    };
++    const keymap = vkb.keyboard.keymap orelse return;
+     synced_virt_kb.seat.synced_virt_kb_queue.pushBackBounded(.{
+         .synced_virt_kb = synced_virt_kb,
+         .data = .{ .keymap = keymap.ref() },
+diff --git a/river/Window.zig b/river/Window.zig
+index c82dea9..295f831 100644
+--- a/river/Window.zig
++++ b/river/Window.zig
+@@ -1134,7 +1134,11 @@ pub fn sendFrameDone(window: Window) void {
+     assert(window.impl != .destroying);
+ 
+     var now = util.timestamp();
+-    window.rootSurface().?.sendFrameDone(&now);
++    const probe_surface = window.rootSurface() orelse {
++        log.err("BUGPROBE: sendFrameDone without root surface (state {s})", .{@tagName(window.state)});
++        return;
++    };
++    probe_surface.sendFrameDone(&now);
+ }
+ 
+ pub fn close(window: Window) void {

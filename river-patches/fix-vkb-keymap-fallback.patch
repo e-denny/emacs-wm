@@ -1,0 +1,74 @@
+--- a/river/SyncedVirtKb.zig
++++ b/river/SyncedVirtKb.zig
+@@ -61,6 +61,27 @@
+     synced_virt_kb.state.data = null;
+     if (wlr_virt_kb.keyboard.keymap) |keymap| {
+         _ = synced_virt_kb.state.setKeymap(keymap);
++    } else if (seat.keyboard_groups.first()) |group| {
++        // The virtual keyboard has no keymap. A client written in a language
++        // that cannot pass a file descriptor over its Wayland connection (e.g.
++        // Emacs Lisp) is unable to send zwp_virtual_keyboard_v1.keymap. Fall
++        // back to the keymap of the seat's real keyboard group: the injected
++        // evdev keycodes then mean exactly what they mean on the physical
++        // keyboard, and wlroots has a keymap to send to the focused client.
++        // Without this the client has no keymap and drops the injected keys.
++        // Set it on the source keyboard as well: wlroots drops key events from
++        // a wlr_keyboard that has no xkb state, before river's listeners ever
++        // see them. Setting it only on the synced state is not enough.
++        if (!wlr_virt_kb.keyboard.setKeymap(group.config.keymap)) {
++            log.err("failed to borrow the seat's keymap for a keymap-less virtual keyboard", .{});
++        }
++        _ = synced_virt_kb.state.setKeymap(group.config.keymap);
++        // wlroots only forwards key events from a virtual keyboard once it
++        // believes a keymap has been set. We just installed one, so say so.
++        wlr_virt_kb.has_keymap = true;
++        log.info("virtual keyboard without keymap: borrowed the seat's keymap", .{});
++    } else {
++        log.err("virtual keyboard without keymap and no keyboard group to borrow one from", .{});
+     }
+ 
+     seat.synced_virt_kbs.append(synced_virt_kb);
+--- a/river/InputManager.zig
++++ b/river/InputManager.zig
+@@ -280,6 +280,26 @@
+             seat.attachNewDevice(&virtual_keyboard.keyboard.base, .{ .virtual = true });
+         }
+     }
++
++    /// Attach a synced virtual keyboard that will never receive a keymap.
++    ///
++    /// zwp_virtual_keyboard_v1.keymap carries a file descriptor. A window
++    /// manager written in a language whose Wayland client cannot pass fds
++    /// (for example Emacs Lisp) cannot send it, so waiting for the keymap
++    /// event would leave the virtual keyboard unattached forever and every
++    /// injected key would be dropped. Attach it now instead: SyncedVirtKb
++    /// borrows the seat's keyboard keymap, and a keymap request arriving
++    /// later still takes effect through its own queue_keymap listener.
++    fn attachWithoutKeymap(no_keymap: *NoKeymapVirtKeyboard) void {
++        const virtual_keyboard = no_keymap.virtual_keyboard;
++        assert(no_keymap.wm_sync);
++        assert(virtual_keyboard.keyboard.keymap == null);
++
++        handleVirtKeyboardDestroy(&no_keymap.destroy, &virtual_keyboard.keyboard.base);
++
++        const seat: *Seat = @ptrCast(@alignCast(virtual_keyboard.seat.data));
++        seat.attachSyncedVirtKb(virtual_keyboard);
++    }
+ };
+ 
+ fn bindVirtKb(client: *wl.Client, _: ?*anyopaque, version: u32, id: u32) void {
+@@ -311,6 +331,14 @@
+             }
+             const no_keymap: *NoKeymapVirtKeyboard = @ptrCast(@alignCast(wlr_vkb.keyboard.data));
+             no_keymap.wm_sync = true;
++
++            // A client that cannot pass an fd will never send a keymap, so
++            // the keymap event that normally attaches the keyboard will never
++            // arrive. Attach now with the seat's keymap instead of silently
++            // leaving every injected key on the floor.
++            if (wlr_vkb.keyboard.keymap == null) {
++                no_keymap.attachWithoutKeymap();
++            }
+         },
+     }
+ }

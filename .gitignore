@@ -1,0 +1,10 @@
+# build output
+*.elc
+test/tools/target/
+test/testbar
+
+# the retired Rust daemon is kept out of this repository (see README)
+/legacy/
+
+# local captures
+*.ppm

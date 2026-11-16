@@ -1,0 +1,27 @@
+--- a/river/main.zig
++++ b/river/main.zig
+@@ -348,7 +348,23 @@
+ 
+     if (scope != .default and !log_scopes.contains(scope)) return;
+ 
+-    log.defaultLog(level, scope, format, args);
++    // Do not use std.log.defaultLog() here.
++    //
++    // It takes std.debug's locked stderr, and calling it from inside a wlroots
++    // listener callback panics with "attempt to use null value" (seen from
++    // TextInput.handleCommit logging "inactive text input tried to commit"):
++    // the panic then recurses into the same lock from panicFn, prints one line
++    // and wedges the whole compositor, which stops processing input. A raw
++    // write cannot do that, costs nothing, and keeps the logs readable.
++    var buf: [2048]u8 = undefined;
++    const body = std.fmt.bufPrint(&buf, format, args) catch return;
++    var line: [2048]u8 = undefined;
++    const text = std.fmt.bufPrint(&line, "{s}({s}): {s}\n", .{
++        @tagName(level),
++        @tagName(scope),
++        body,
++    }) catch body;
++    _ = std.os.linux.write(std.posix.STDERR_FILENO, text.ptr, text.len);
+ }
+ 
+ /// See wlroots_log_wrapper.c

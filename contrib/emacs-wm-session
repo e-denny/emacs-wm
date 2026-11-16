@@ -1,0 +1,124 @@
+#!/bin/sh
+# emacs-wm-session --- start the Emacs window manager session.
+#
+# Two roles, because the compositor runs its init program as a child:
+#
+#   emacs-wm-session            exec river, which runs this script back with
+#                               --wm (that child is where the WM lives)
+#   emacs-wm-session --wm       start the frontend Emacs
+#
+# The frontend is lisp/emacs-wm-session.el: it loads the user configuration,
+# becomes the river window manager (spawning the backend Emacs), and starts the
+# autostart commands from the configuration.  Everything this script does is
+# process hygiene and environment, never policy.
+#
+# Environment:
+#   EMACS_WM_RIVER            river binary to run.  Must be a 0.6 build with
+#                             the patches in lisp/../EMACS-ONLY.md --stock 0.5
+#                             cannot inject keys from an fd-less virtual
+#                             keyboard, so `:simulate' rules silently fail.
+#   EMACS_WM_EMACS            Emacs binary (default: emacs)
+#   EMACS_WM_LOAD_USER_INIT   non-empty: start the WM in your normal Emacs
+#                             (loads your init file) instead of `-Q'
+#   EMACS_WM_RIVER_LOG_LEVEL  river's own log level (default: info)
+#   XDG_STATE_HOME            session/frontend/backend logs go to
+#                             $XDG_STATE_HOME/emacs-wm/ (default ~/.local/state)
+set -eu
+
+SELF=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/$(basename -- "$0")
+REPO=${EMACS_WM_REPO:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)}
+LISP=$REPO/lisp
+STATE=${XDG_STATE_HOME:-${HOME:-/tmp}/.local/state}/emacs-wm
+
+say() { printf 'emacs-wm-session: %s\n' "$*" >&2; }
+
+# The patched build next to this repository is the one the WM needs; a `river'
+# from $PATH is very likely the distribution's 0.5 and misses the virtual
+# keyboard fixes, so it is only a last resort.
+find_river() {
+    if [ -n "${EMACS_WM_RIVER:-}" ]; then
+        printf '%s\n' "$EMACS_WM_RIVER"
+    elif [ -x "$REPO/../river/zig-out/bin/river" ]; then
+        printf '%s\n' "$REPO/../river/zig-out/bin/river"
+    else
+        command -v river 2>/dev/null || true
+    fi
+}
+
+start_wm() {
+    mkdir -p "$STATE"
+    LOG=$STATE/session.log
+    exec >>"$LOG" 2>&1
+    say "=== wm start $(date -Is) WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-unset}"
+
+    EMACS=${EMACS_WM_EMACS:-emacs}
+    if ! command -v "$EMACS" >/dev/null 2>&1; then
+        say "no Emacs: set EMACS_WM_EMACS"
+        exit 1
+    fi
+
+    # One file per generation of each process, so a wedged session leaves
+    # something to read instead of interleaved noise.
+    EMACS_WM_LOG_FILE=$STATE/frontend.log
+    EMACS_WM_BE_LOG_FILE=$STATE/backend.log
+    EMACS_WM_BE_LOG_LEVEL=${EMACS_WM_BE_LOG_LEVEL:-info}
+    export EMACS_WM_LOG_FILE EMACS_WM_BE_LOG_FILE EMACS_WM_BE_LOG_LEVEL
+
+    set -- -Q
+    if [ -n "${EMACS_WM_LOAD_USER_INIT:-}" ]; then
+        set --
+    fi
+
+    "$EMACS" "$@" -L "$LISP" -l emacs-wm-session &
+    EMACSPID=$!
+
+    # This script is the compositor's child: if it exits or is killed, the
+    # frontend must go too.  An orphaned frontend would re-attach to a later
+    # compositor that reuses the same WAYLAND_DISPLAY, and two window managers
+    # fighting over one session spin at 100% CPU.
+    trap 'kill "$EMACSPID" 2>/dev/null' EXIT TERM INT HUP
+
+    # Same guard for the other direction: when the compositor socket goes away
+    # (or is replaced by a new session's), Emacs is talking to a dead or
+    # different display.
+    sock=${XDG_RUNTIME_DIR:-/tmp}/${WAYLAND_DISPLAY:-wayland-0}
+    ino=$(stat -c %i "$sock" 2>/dev/null || echo none)
+    while kill -0 "$EMACSPID" 2>/dev/null; do
+        sleep 2
+        now=$(stat -c %i "$sock" 2>/dev/null || echo none)
+        [ "$now" = "$ino" ] || break
+    done
+    say "=== wm end $(date -Is) (compositor socket changed, or Emacs exited)"
+    kill "$EMACSPID" 2>/dev/null || true
+    wait "$EMACSPID" 2>/dev/null || true
+}
+
+start_compositor() {
+    river=$(find_river)
+    if [ -z "$river" ] || [ ! -x "$river" ]; then
+        say "no river binary: set EMACS_WM_RIVER (needs the patched 0.6 build)"
+        exit 1
+    fi
+    case $river in
+        "$REPO/../river/zig-out/bin/river"|*/src/river/*) ;;
+        *) say "warning: $river looks like a stock river; key injection"
+           say "warning: (\`:simulate' rules, emacs-wm-inject) needs the patched build" ;;
+    esac
+
+    : "${XDG_CURRENT_DESKTOP:=emacs-wm}"
+    : "${XDG_SESSION_DESKTOP:=emacs-wm}"
+    : "${XDG_SESSION_TYPE:=wayland}"
+    export XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE
+
+    # Quote the script path for `sh -c', which is how river runs its init
+    # command.
+    init=$(printf '%s' "$SELF" | sed "s/'/'\\\\''/g")
+    say "exec $river (init: $init --wm)"
+    exec "$river" -log-level "${EMACS_WM_RIVER_LOG_LEVEL:-info}" \
+         -c "'$init' --wm"
+}
+
+case ${1:-} in
+    --wm) shift; start_wm ;;
+    *) start_compositor ;;
+esac

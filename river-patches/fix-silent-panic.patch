@@ -1,0 +1,40 @@
+diff --git a/river/main.zig b/river/main.zig
+index 5ee24b0..47a1d12 100644
+--- a/river/main.zig
++++ b/river/main.zig
+@@ -306,6 +309,35 @@ pub const std_options: std.Options = .{
+     .logFn = logFn,
+ };
+ 
++/// Overrides the panic namespace the compiler emits safety panics through, so
++/// that a panic always ends with a trace and an abort (see panicFn).
++pub const panic = std.debug.FullPanic(panicFn);
++
++/// Zig's default panic path prints the message and then unwinds with
++/// `allow_unsafe_unwind = true`. When a panic happens inside a wlroots listener
++/// callback that frame-pointer walk can loop forever: the process then prints
++/// exactly one line, never a trace and never aborts, which from the outside
++/// looks like a compositor that is frozen but alive. That is how the synced
++/// virtual keyboard defects presented, and it cost a whole debugging session.
++/// Print the message, unwind only when that is known to be safe, then abort
++/// unconditionally.
++fn panicFn(msg: []const u8, first_trace_addr: ?usize) noreturn {
++    const stderr = std.debug.lockStderr(&.{});
++    defer std.debug.unlockStderr();
++
++    std.debug.print("thread {d} panic: {s}\n", .{ std.Thread.getCurrentId(), msg });
++
++    std.debug.writeCurrentStackTrace(.{
++        .first_address = first_trace_addr,
++        .allow_unsafe_unwind = false,
++    }, stderr.terminal()) catch {
++        std.debug.print("stack trace unavailable\n", .{});
++    };
++
++    std.debug.print("aborting\n", .{});
++    std.process.abort();
++}
++
+ pub fn logFn(
+     comptime level: log.Level,
+     comptime scope: @TypeOf(.EnumLiteral),
